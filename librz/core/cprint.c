@@ -35,7 +35,7 @@ RZ_API char *rz_core_print_string_c_cpp(RzCore *core) {
 /**
  * \brief Print hexdump diff between \p aa and \p ba with \p len
  */
-RZ_API bool rz_core_print_cmp(RZ_NONNULL RzCore *core, ut64 aa, ut64 ba, ut64 len) {
+RZ_API bool rz_core_print_hexdump_diff(RZ_NONNULL RzCore *core, ut64 aa, ut64 ba, ut64 len) {
 	rz_return_val_if_fail(core && core->cons && len > 0, false);
 	ut8 *a = malloc(len);
 	if (!a) {
@@ -47,7 +47,7 @@ RZ_API bool rz_core_print_cmp(RZ_NONNULL RzCore *core, ut64 aa, ut64 ba, ut64 le
 		return false;
 	}
 
-	RZ_LOG_VERBOSE("diff 0x%" PFMT64x " 0x%" PFMT64x " with len:%" PFMT64d "\n", aa, ba, len);
+	RZ_LOG_VERBOSE("print hexdump diff 0x%" PFMT64x " 0x%" PFMT64x " with len:%" PFMT64d "\n", aa, ba, len);
 
 	rz_io_read_at(core->io, aa, a, (int)len);
 	rz_io_read_at(core->io, ba, b, (int)len);
@@ -85,17 +85,20 @@ static inline void fix_size_from_format(const RzCorePrintFormatType format, ut8 
 }
 
 static inline void len_fixup(RzCore *core, ut64 *addr, int *len) {
-	if (!len || *len >= 0) {
+	if (!len) {
 		return;
 	}
-	*len = -*len;
-	if (*len > core->blocksize_max) {
-		RZ_LOG_ERROR("this block size is too big (0x%" PFMT32x
+	bool is_positive = *len > 0;
+	if (RZ_ABS(*len) > core->blocksize_max) {
+		RZ_LOG_ERROR("this <len> is too big (0x%" PFMT32x
 			     " < 0x%" PFMT32x ").",
-			*len,
-			core->blocksize_max);
+			*len, core->blocksize_max);
 		*len = (int)core->blocksize_max;
 	}
+	if (is_positive) {
+		return;
+	}
+	*len = RZ_ABS(*len);
 	if (addr) {
 		*addr = *addr - *len;
 	}
@@ -149,7 +152,7 @@ RZ_API bool rz_core_print_dump(RZ_NONNULL RzCore *core, RZ_NULLABLE RzCmdStateOu
  * \brief Print hexdump at \p addr, but maybe print hexdiff if (diff.from or diff.to), \see "el diff"
  * \param len Dump bytes length
  */
-RZ_API bool rz_core_print_hexdump_(RZ_NONNULL RzCore *core, RZ_NULLABLE RzCmdStateOutput *state, ut64 addr, int len) {
+RZ_API bool rz_core_print_hexdump_or_hexdiff(RZ_NONNULL RzCore *core, RZ_NULLABLE RzCmdStateOutput *state, ut64 addr, int len) {
 	rz_return_val_if_fail(core, false);
 	if (!len) {
 		return true;
@@ -170,7 +173,7 @@ RZ_API bool rz_core_print_hexdump_(RZ_NONNULL RzCore *core, RZ_NULLABLE RzCmdSta
 			rz_print_hexdump(core->print, rz_core_pava(core, addr), buffer, len, 16, 1, 1);
 			free(buffer);
 		} else {
-			rz_core_print_cmp(core, addr, addr + to - from, len);
+			rz_core_print_hexdump_diff(core, addr, addr + to - from, len);
 		}
 		break;
 	}
